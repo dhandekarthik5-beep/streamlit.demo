@@ -1,182 +1,85 @@
 import streamlit as st
 import requests
-from datetime import datetime
 
-# -------------------------------
-# Page Configuration
-# -------------------------------
-st.set_page_config(
-    page_title="Advanced News Dashboard",
-    page_icon="📰",
-    layout="wide"
-)
+st.set_page_config(page_title="News Dashboard", layout="wide")
 
-# -------------------------------
-# API Configuration
-# -------------------------------
-API_KEY = st.secrets["NEWS_API_KEY"]
-BASE_URL = "https://newsapi.org/v2/top-headlines"
+st.title("📰 News Dashboard")
 
-# -------------------------------
-# Sidebar Filters
-# -------------------------------
-st.sidebar.title("📰 News Filters")
+# -----------------------------
+# API KEY (FROM SECRETS)
+# -----------------------------
+api_key = st.secrets.get("NEWS_API_KEY", None)
+
+if not api_key:
+    st.error("❌ API Key not found. Please add NEWS_API_KEY in .streamlit/secrets.toml")
+    st.stop()
+
+# -----------------------------
+# SIDEBAR FILTERS
+# -----------------------------
+st.sidebar.header("Filters")
 
 country = st.sidebar.selectbox(
-    "Select Country",
-    {
-        "India": "in",
-        "United States": "us",
-        "United Kingdom": "gb",
-        "Australia": "au",
-        "Canada": "ca",
-        "Germany": "de",
-        "France": "fr"
-    }.keys()
+    "🌍 Country",
+    ["in", "us", "gb", "au", "ca", "de", "fr"]
 )
-
-country_code = {
-    "India": "in",
-    "United States": "us",
-    "United Kingdom": "gb",
-    "Australia": "au",
-    "Canada": "ca",
-    "Germany": "de",
-    "France": "fr"
-}[country]
 
 category = st.sidebar.selectbox(
-    "Select Topic",
-    [
-        "general",
-        "business",
-        "entertainment",
-        "health",
-        "science",
-        "sports",
-        "technology"
-    ]
+    "📂 Category",
+    ["general", "business", "entertainment", "health", "science", "sports", "technology"]
 )
 
-article_count = st.sidebar.slider(
-    "Number of Articles",
-    min_value=5,
-    max_value=100,
-    value=20
-)
+keyword = st.sidebar.text_input("🔎 Keyword Search")
 
-keyword = st.sidebar.text_input(
-    "Search Keyword",
-    placeholder="e.g. AI, Tesla, Cricket"
-)
+limit = st.sidebar.slider("📊 Number of Articles", 1, 50, 10)
 
-search_button = st.sidebar.button("🔍 Search News")
+# -----------------------------
+# FETCH BUTTON
+# -----------------------------
+if st.button("🚀 Fetch News"):
 
-# -------------------------------
-# Title
-# -------------------------------
-st.title("📰 Advanced News Dashboard")
-st.markdown("Stay updated with the latest headlines worldwide.")
+    with st.spinner("Fetching latest news..."):
 
-# -------------------------------
-# Fetch News Function
-# -------------------------------
-def fetch_news():
-    params = {
-        "apiKey": API_KEY,
-        "country": country_code,
-        "category": category,
-        "pageSize": article_count
-    }
+        # Default endpoint
+        url = "https://newsapi.org/v2/top-headlines"
+        params = {
+            "apiKey": api_key,
+            "country": country,
+            "category": category,
+            "pageSize": limit
+        }
 
-    response = requests.get(BASE_URL, params=params)
+        # If keyword is given, switch endpoint
+        if keyword:
+            url = "https://newsapi.org/v2/everything"
+            params = {
+                "apiKey": api_key,
+                "q": keyword,
+                "pageSize": limit,
+                "sortBy": "publishedAt"
+            }
 
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(
-            f"Error {response.status_code}: Unable to fetch news."
-        )
-        return None
+        response = requests.get(url, params=params)
 
-# -------------------------------
-# Search News Function
-# -------------------------------
-def search_news(query):
-    url = "https://newsapi.org/v2/everything"
+        if response.status_code != 200:
+            st.error("❌ Error fetching news")
+            st.write(response.json())
+        else:
+            articles = response.json().get("articles", [])
 
-    params = {
-        "q": query,
-        "sortBy": "publishedAt",
-        "language": "en",
-        "pageSize": article_count,
-        "apiKey": API_KEY
-    }
+            if not articles:
+                st.warning("No articles found")
+            else:
+                st.success(f"Found {len(articles)} articles")
 
-    response = requests.get(url, params=params)
+                for article in articles:
+                    st.markdown("---")
 
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(
-            f"Error {response.status_code}: Search failed."
-        )
-        return None
+                    st.subheader(article.get("title", "No Title"))
+                    st.write(article.get("description", "No Description"))
 
-# -------------------------------
-# Get Data
-# -------------------------------
-data = None
+                    if article.get("url"):
+                        st.markdown(f"🔗 [Read Full Article]({article['url']})")
 
-if search_button:
-    if keyword:
-        data = search_news(keyword)
-    else:
-        data = fetch_news()
-else:
-    data = fetch_news()
-
-# -------------------------------
-# Display Articles
-# -------------------------------
-if data and data.get("articles"):
-
-    st.success(
-        f"Found {len(data['articles'])} articles"
-    )
-
-    for article in data["articles"]:
-
-        title = article.get("title", "No Title")
-        source = article.get("source", {}).get("name", "Unknown")
-        description = article.get("description", "")
-        url = article.get("url", "#")
-        image = article.get("urlToImage")
-        published = article.get("publishedAt", "")
-
-        with st.container():
-
-            col1, col2 = st.columns([1, 3])
-
-            with col1:
-                if image:
-                    st.image(image, use_container_width=True)
-
-            with col2:
-                st.subheader(title)
-
-                st.caption(
-                    f"Source: {source} | Published: {published}"
-                )
-
-                if description:
-                    st.write(description)
-
-                st.markdown(
-                    f"[📖 Read Full Article]({url})"
-                )
-
-            st.divider()
-
-else:
-    st.warning("No news articles found.")
+                    if article.get("urlToImage"):
+                        st.image(article["urlToImage"], use_container_width=True)
