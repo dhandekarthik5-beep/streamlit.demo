@@ -1,2 +1,0 @@
-# streamlit.demo
-Hello World
